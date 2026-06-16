@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs'
 import { db } from '../db.js'
 
 export async function buildSubmissionsWorkbook(): Promise<Buffer> {
-  const submissions = db.getAllSubmissions()
+  const submissions = await db.getAllSubmissions()
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Field Trip System'
   workbook.created = new Date()
@@ -33,9 +33,9 @@ export async function buildSubmissionsWorkbook(): Promise<Buffer> {
   sheet.getRow(1).height = 26
 
   // Data
-  submissions.forEach((sub) => {
-    const school = db.getSchoolById(sub.school_id)
-    const schoolStudents = db.getStudentsBySchool(sub.school_id)
+  for (const sub of submissions) {
+    const school = await db.getSchoolById(sub.school_id)
+    const schoolStudents = await db.getStudentsBySchool(sub.school_id)
     const nameMap = new Map(schoolStudents.map((s) => [s.id, s.name]))
     sheet.addRow({
       id: sub.id,
@@ -50,7 +50,7 @@ export async function buildSubmissionsWorkbook(): Promise<Buffer> {
           : sub.field_trip_student_ids.map((id) => nameMap.get(id) ?? `#${id}`).join(', '),
       submitted_at: sub.submitted_at,
     })
-  })
+  }
 
   // Zebra striping
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {

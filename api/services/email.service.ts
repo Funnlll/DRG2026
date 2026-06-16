@@ -35,9 +35,9 @@ export interface EmailSubmissionData {
 }
 
 export async function sendSubmissionEmail(data: EmailSubmissionData): Promise<void> {
-  const school = db.getSchoolById(data.school_id)
+  const school = await db.getSchoolById(data.school_id)
   const schoolName = school?.name ?? 'Unknown School'
-  const allStudents = db.getStudentsBySchool(data.school_id)
+  const allStudents = await db.getStudentsBySchool(data.school_id)
   const nameMap = new Map(allStudents.map((s) => [s.id, s.name]))
 
   const visitNames = data.visit_student_ids.map((id) => nameMap.get(id) ?? `#${id}`)

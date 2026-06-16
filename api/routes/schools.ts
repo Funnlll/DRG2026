@@ -6,8 +6,13 @@ const router = Router()
 /**
  * GET /api/schools - 获取学校列表
  */
-router.get('/', (_req: Request, res: Response): void => {
-  res.json({ schools: db.getSchools() })
+router.get('/', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ schools: await db.getSchools() })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 export default router

@@ -8,6 +8,9 @@ import express, {
 } from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import schoolRoutes from './routes/schools.js'
 import studentRoutes from './routes/students.js'
 import submissionRoutes from './routes/submissions.js'
@@ -16,6 +19,13 @@ import fieldTripRoutes from './routes/field-trip.js'
 dotenv.config()
 
 const app: express.Application = express()
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const staticDir =
+  [
+    path.resolve(__dirname, '..', '..', 'dist'),
+    path.resolve(__dirname, '..', 'dist'),
+  ].find((dir) => fs.existsSync(dir)) ?? path.resolve(__dirname, '..', '..', 'dist')
 
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
@@ -38,6 +48,20 @@ app.use(
     res.status(200).json({ success: true, message: 'ok' })
   },
 )
+
+/**
+ * Production static frontend hosting.
+ */
+if (process.env.NODE_ENV === 'production' && fs.existsSync(staticDir)) {
+  app.use(express.static(staticDir))
+  app.get('*', (req: Request, res: Response, next: NextFunction): void => {
+    if (req.path.startsWith('/api/')) {
+      next()
+      return
+    }
+    res.sendFile(path.join(staticDir, 'index.html'))
+  })
+}
 
 /**
  * 全局错误处理

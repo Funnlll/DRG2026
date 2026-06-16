@@ -1,14 +1,24 @@
 /**
- * JSON file storage for persistence
- * Simple, stable, zero native dependencies, suitable for MVP (small data size)
+ * Data storage adapter.
+ * Uses PostgreSQL when DATABASE_URL is configured, otherwise falls back to JSON.
  */
+import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import pg from 'pg'
+
+const { Pool } = pg
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const DATA_DIR = path.join(__dirname, '..', 'data')
+const DATA_DIR =
+  process.env.DATA_DIR ??
+  [
+    path.resolve(__dirname, '..', '..', 'data'),
+    path.resolve(__dirname, '..', 'data'),
+  ].find((dir) => fs.existsSync(dir)) ??
+  path.resolve(__dirname, '..', '..', 'data')
 const DATA_FILE = path.join(DATA_DIR, 'data.json')
 
 if (!fs.existsSync(DATA_DIR)) {
@@ -225,25 +235,38 @@ function getDB(): Database {
   return _db
 }
 
-export const db = {
-  getSchools(): School[] {
-    return getDB().schools
-  },
-  getStudentsBySchool(schoolId: number): Student[] {
-    return getDB().students.filter((s) => s.school_id === schoolId)
-  },
-  getAllSubmissions(): Submission[] {
-    return getDB().submissions
-  },
-  getSchoolById(id: number): School | undefined {
-    return getDB().schools.find((s) => s.id === id)
-  },
+export interface DataStore {
+  getSchools(): Promise<School[]>
+  getStudentsBySchool(schoolId: number): Promise<Student[]>
+  getAllSubmissions(): Promise<Submission[]>
+  getSchoolById(id: number): Promise<School | undefined>
   addSubmission(input: {
     school_id: number
     visit_student_ids: number[]
     field_trip_student_ids: number[]
     extra_participant_names?: string[]
-  }): Submission {
+  }): Promise<Submission>
+}
+
+const jsonDb: DataStore = {
+  async getSchools(): Promise<School[]> {
+    return getDB().schools
+  },
+  async getStudentsBySchool(schoolId: number): Promise<Student[]> {
+    return getDB().students.filter((s) => s.school_id === schoolId)
+  },
+  async getAllSubmissions(): Promise<Submission[]> {
+    return getDB().submissions
+  },
+  async getSchoolById(id: number): Promise<School | undefined> {
+    return getDB().schools.find((s) => s.id === id)
+  },
+  async addSubmission(input: {
+    school_id: number
+    visit_student_ids: number[]
+    field_trip_student_ids: number[]
+    extra_participant_names?: string[]
+  }): Promise<Submission> {
     const data = getDB()
     const submission: Submission = {
       id: data.next_submission_id++,
@@ -258,3 +281,215 @@ export const db = {
     return submission
   },
 }
+
+function toNumberArray(value: unknown): number[] {
+  if (Array.isArray(value)) return value.map(Number)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed.map(Number) : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String)
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed.map(String) : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function toIsoString(value: unknown): string {
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'string') return new Date(value).toISOString()
+  return new Date().toISOString()
+}
+
+function rowToSubmission(row: Record<string, unknown>): Submission {
+  return {
+    id: Number(row.id),
+    school_id: Number(row.school_id),
+    visit_student_ids: toNumberArray(row.visit_student_ids),
+    field_trip_student_ids: toNumberArray(row.field_trip_student_ids),
+    extra_participant_names: toStringArray(row.extra_participant_names),
+    submitted_at: toIsoString(row.submitted_at),
+  }
+}
+
+function createPostgresDb(): DataStore {
+  const ssl =
+    process.env.PGSSLMODE === 'require' || process.env.DATABASE_SSL === 'true'
+      ? { rejectUnauthorized: false }
+      : undefined
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.DB_POOL_MAX ?? 5),
+    ssl,
+  })
+
+  let ready: Promise<void> | null = null
+
+  async function ensureReady(): Promise<void> {
+    if (ready) return ready
+    ready = (async () => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS schools (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+          )
+        `)
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS students (
+            id INTEGER PRIMARY KEY,
+            school_id INTEGER NOT NULL REFERENCES schools(id),
+            name TEXT NOT NULL
+          )
+        `)
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS submissions (
+            id SERIAL PRIMARY KEY,
+            school_id INTEGER NOT NULL REFERENCES schools(id),
+            visit_student_ids JSONB NOT NULL,
+            field_trip_student_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+            extra_participant_names JSONB NOT NULL DEFAULT '[]'::jsonb,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        `)
+
+        for (const school of SEED.schools) {
+          await client.query(
+            `INSERT INTO schools (id, name)
+             VALUES ($1, $2)
+             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+            [school.id, school.name],
+          )
+        }
+
+        for (const student of SEED.students) {
+          await client.query(
+            `INSERT INTO students (id, school_id, name)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (id) DO UPDATE
+             SET school_id = EXCLUDED.school_id, name = EXCLUDED.name`,
+            [student.id, student.school_id, student.name],
+          )
+        }
+
+        const { rows } = await client.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM submissions')
+        if (Number(rows[0]?.count ?? 0) === 0 && fs.existsSync(DATA_FILE)) {
+          const existing = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8')) as Database
+          for (const submission of existing.submissions ?? []) {
+            await client.query(
+              `INSERT INTO submissions (
+                id,
+                school_id,
+                visit_student_ids,
+                field_trip_student_ids,
+                extra_participant_names,
+                submitted_at
+              )
+              VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6)
+              ON CONFLICT (id) DO NOTHING`,
+              [
+                submission.id,
+                submission.school_id,
+                JSON.stringify(submission.visit_student_ids ?? []),
+                JSON.stringify(submission.field_trip_student_ids ?? []),
+                JSON.stringify(submission.extra_participant_names ?? []),
+                submission.submitted_at,
+              ],
+            )
+          }
+        }
+
+        await client.query(`
+          SELECT setval(
+            pg_get_serial_sequence('submissions', 'id'),
+            COALESCE((SELECT MAX(id) FROM submissions), 1),
+            (SELECT COUNT(*) > 0 FROM submissions)
+          )
+        `)
+        await client.query('COMMIT')
+        console.log('PostgreSQL storage ready')
+      } catch (error) {
+        await client.query('ROLLBACK')
+        ready = null
+        throw error
+      } finally {
+        client.release()
+      }
+    })()
+    return ready
+  }
+
+  return {
+    async getSchools(): Promise<School[]> {
+      await ensureReady()
+      const { rows } = await pool.query<School>('SELECT id, name FROM schools ORDER BY id ASC')
+      return rows
+    },
+
+    async getStudentsBySchool(schoolId: number): Promise<Student[]> {
+      await ensureReady()
+      const { rows } = await pool.query<Student>(
+        'SELECT id, school_id, name FROM students WHERE school_id = $1 ORDER BY id ASC',
+        [schoolId],
+      )
+      return rows
+    },
+
+    async getAllSubmissions(): Promise<Submission[]> {
+      await ensureReady()
+      const { rows } = await pool.query<Record<string, unknown>>(
+        `SELECT id, school_id, visit_student_ids, field_trip_student_ids, extra_participant_names, submitted_at
+         FROM submissions
+         ORDER BY id ASC`,
+      )
+      return rows.map(rowToSubmission)
+    },
+
+    async getSchoolById(id: number): Promise<School | undefined> {
+      await ensureReady()
+      const { rows } = await pool.query<School>(
+        'SELECT id, name FROM schools WHERE id = $1',
+        [id],
+      )
+      return rows[0]
+    },
+
+    async addSubmission(input): Promise<Submission> {
+      await ensureReady()
+      const { rows } = await pool.query<Record<string, unknown>>(
+        `INSERT INTO submissions (
+          school_id,
+          visit_student_ids,
+          field_trip_student_ids,
+          extra_participant_names
+        )
+        VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb)
+        RETURNING id, school_id, visit_student_ids, field_trip_student_ids, extra_participant_names, submitted_at`,
+        [
+          input.school_id,
+          JSON.stringify(input.visit_student_ids ?? []),
+          JSON.stringify(input.field_trip_student_ids ?? []),
+          JSON.stringify(input.extra_participant_names ?? []),
+        ],
+      )
+      return rowToSubmission(rows[0])
+    },
+  }
+}
+
+export const db: DataStore = process.env.DATABASE_URL ? createPostgresDb() : jsonDb

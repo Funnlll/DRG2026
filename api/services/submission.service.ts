@@ -22,9 +22,9 @@ export class ValidationError extends Error {
 }
 
 export const submissionService = {
-  create(input: SubmitInput) {
+  async create(input: SubmitInput) {
     // 1) School must exist
-    const school = db.getSchoolById(input.school_id)
+    const school = await db.getSchoolById(input.school_id)
     if (!school) throw new ValidationError('School not found')
 
     // 2) At least 1 visiting student or extra participant required
@@ -36,7 +36,7 @@ export const submissionService = {
     }
 
     // 3) Visiting students must belong to the school
-    const schoolStudents = db.getStudentsBySchool(input.school_id)
+    const schoolStudents = await db.getStudentsBySchool(input.school_id)
     const schoolStudentIds = new Set(schoolStudents.map((s) => s.id))
     for (const sid of input.visit_student_ids) {
       if (!schoolStudentIds.has(sid)) {
@@ -53,7 +53,7 @@ export const submissionService = {
       }
     }
 
-    return db.addSubmission({
+    return await db.addSubmission({
       school_id: input.school_id,
       visit_student_ids: input.visit_student_ids,
       field_trip_student_ids: fieldTrip,
@@ -61,10 +61,11 @@ export const submissionService = {
     })
   },
 
-  list() {
-    return db.getAllSubmissions().map((sub) => {
-      const school = db.getSchoolById(sub.school_id)
-      const schoolStudents = db.getStudentsBySchool(sub.school_id)
+  async list() {
+    const submissions = await db.getAllSubmissions()
+    return await Promise.all(submissions.map(async (sub) => {
+      const school = await db.getSchoolById(sub.school_id)
+      const schoolStudents = await db.getStudentsBySchool(sub.school_id)
       const nameMap = new Map(schoolStudents.map((s) => [s.id, s.name]))
       return {
         id: sub.id,
@@ -79,6 +80,6 @@ export const submissionService = {
             : sub.field_trip_student_ids.map((id) => nameMap.get(id) ?? `#${id}`).join(', '),
         submitted_at: sub.submitted_at,
       }
-    })
+    }))
   },
 }

@@ -22,7 +22,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         ? req.body.extra_participant_names
         : [],
     }
-    const result = submissionService.create(input)
+    const result = await submissionService.create(input)
 
     // 异步发送邮件通知（不阻塞响应）
     sendSubmissionEmail(result).catch((err) => {
@@ -43,8 +43,13 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 /**
  * GET /api/submissions - 获取所有提交记录
  */
-router.get('/', (_req: Request, res: Response): void => {
-  res.json({ submissions: submissionService.list() })
+router.get('/', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ submissions: await submissionService.list() })
+  } catch (e) {
+    console.error(e)
+    res.status(500).json({ error: 'Server error' })
+  }
 })
 
 /**
