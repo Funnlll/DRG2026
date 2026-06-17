@@ -38,6 +38,7 @@ export const api = {
     visit_student_ids: number[]
     field_trip_student_ids: number[]
     extra_participant_names?: string[]
+    field_trip_extra_participant_names?: string[]
   }) =>
     request<{ submission: Submission }>('/api/submissions', {
       method: 'POST',

@@ -7,8 +7,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-.env
+.env.local
 node_modules
+.npm-cache
+data/data.json
 dist
 dist-server
 dist-ssr

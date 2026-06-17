@@ -18,7 +18,9 @@ export default function Step3FieldTrip() {
     visitStudentIds,
     extraParticipantNames,
     fieldTripStudentIds,
+    fieldTripExtraParticipantNames,
     setFieldTripStudents,
+    setFieldTripExtraParticipants,
     setLastSubmission,
     reset,
   } = useFlowStore()
@@ -53,6 +55,8 @@ export default function Step3FieldTrip() {
 
   const totalVisitors = visitStudentIds.length + extraParticipantNames.length
   const selectedSet = useMemo(() => new Set(fieldTripStudentIds), [fieldTripStudentIds])
+  const selectedExtraSet = useMemo(() => new Set(fieldTripExtraParticipantNames), [fieldTripExtraParticipantNames])
+  const totalFieldTripParticipants = fieldTripStudentIds.length + fieldTripExtraParticipantNames.length
 
   const toggle = (id: number) => {
     const next = new Set(selectedSet)
@@ -61,10 +65,17 @@ export default function Step3FieldTrip() {
     setFieldTripStudents([...next])
   }
 
+  const toggleExtra = (name: string) => {
+    const next = new Set(selectedExtraSet)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+    setFieldTripExtraParticipants([...next])
+  }
+
   const handleSubmit = async () => {
     if (schoolId == null) return
-    if (fieldTripStudentIds.length === 0) {
-      const ok = window.confirm('No Field Trip students selected. Are you sure you want to submit?')
+    if (totalFieldTripParticipants === 0) {
+      const ok = window.confirm('No Field Trip participants selected. Are you sure you want to submit?')
       if (!ok) return
     }
     setSubmitting(true)
@@ -74,6 +85,7 @@ export default function Step3FieldTrip() {
         visit_student_ids: visitStudentIds,
         field_trip_student_ids: fieldTripStudentIds,
         extra_participant_names: extraParticipantNames,
+        field_trip_extra_participant_names: fieldTripExtraParticipantNames,
       })
       setLastSubmission(res.submission)
       toast.success('Submitted successfully!')
@@ -130,7 +142,7 @@ export default function Step3FieldTrip() {
                       Selected
                     </div>
                     <div className="font-display text-3xl font-bold text-accent-deep tabular-nums leading-none mt-0.5">
-                      {fieldTripStudentIds.length}
+                      {totalFieldTripParticipants}
                     </div>
                   </div>
                 </div>
@@ -150,20 +162,47 @@ export default function Step3FieldTrip() {
                       />
                     </div>
                   ))}
-                  {extraParticipantNames.map((name) => (
-                    <div
+                  {extraParticipantNames.map((name) => {
+                    const checked = selectedExtraSet.has(name)
+                    return (
+                    <label
                       key={name}
-                      className="flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 border-dashed border-accent bg-accent-soft/30"
+                      className={[
+                        'group flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 cursor-pointer transition-all duration-200 hover:shadow-paper',
+                        checked
+                          ? 'border-accent bg-accent-soft/40 shadow-paper'
+                          : 'border-dashed border-accent/50 bg-accent-soft/20 hover:border-accent',
+                      ].join(' ')}
                     >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleExtra(name)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={[
+                          'shrink-0 w-6 h-6 rounded-md flex items-center justify-center transition-all',
+                          checked
+                            ? 'bg-accent text-white scale-110'
+                            : 'bg-cream border-2 border-border group-hover:border-accent',
+                        ].join(' ')}
+                      >
+                        {checked && (
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5">
+                            <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </span>
                       <div className="w-9 h-9 rounded-full bg-accent text-white flex items-center justify-center">
                         <UserPlus className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-base truncate">{name}</div>
-                        <div className="text-xs text-soft">Additional participant (cannot join Field Trip)</div>
+                        <div className="font-semibold text-base truncate text-primary">{name}</div>
+                        <div className="text-xs text-soft">Additional participant</div>
                       </div>
-                    </div>
-                  ))}
+                    </label>
+                  )})}
                 </div>
 
                 <div className="mt-5 p-3 rounded-xl bg-cream/60 border border-dashed border-line text-xs text-mute flex items-start gap-2">

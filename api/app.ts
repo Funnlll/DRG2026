@@ -16,7 +16,7 @@ import studentRoutes from './routes/students.js'
 import submissionRoutes from './routes/submissions.js'
 import fieldTripRoutes from './routes/field-trip.js'
 
-dotenv.config()
+dotenv.config({ quiet: true })
 
 const app: express.Application = express()
 const __filename = fileURLToPath(import.meta.url)

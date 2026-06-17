@@ -1,8 +1,9 @@
 /**
  * Business Rules:
  * - field_trip_student_ids must be a subset of visit_student_ids
+ * - field_trip_extra_participant_names must be a subset of extra_participant_names
  * - visit_student_ids must have at least 1 item
- * - field_trip_student_ids can be empty
+ * - field trip participants can be empty
  */
 import { db } from '../db.js'
 
@@ -11,6 +12,7 @@ export interface SubmitInput {
   visit_student_ids: number[]
   field_trip_student_ids: number[]
   extra_participant_names?: string[]
+  field_trip_extra_participant_names?: string[]
 }
 
 export class ValidationError extends Error {
@@ -53,11 +55,22 @@ export const submissionService = {
       }
     }
 
+    // 5) Field Trip extra participants must be subset of added extra participants
+    const extraParticipants = input.extra_participant_names ?? []
+    const extraSet = new Set(extraParticipants)
+    const fieldTripExtra = input.field_trip_extra_participant_names ?? []
+    for (const name of fieldTripExtra) {
+      if (!extraSet.has(name)) {
+        throw new ValidationError(`Field Trip participant "${name}" must first be added as an extra participant`)
+      }
+    }
+
     return await db.addSubmission({
       school_id: input.school_id,
       visit_student_ids: input.visit_student_ids,
       field_trip_student_ids: fieldTrip,
       extra_participant_names: input.extra_participant_names,
+      field_trip_extra_participant_names: fieldTripExtra,
     })
   },
 
@@ -67,6 +80,9 @@ export const submissionService = {
       const school = await db.getSchoolById(sub.school_id)
       const schoolStudents = await db.getStudentsBySchool(sub.school_id)
       const nameMap = new Map(schoolStudents.map((s) => [s.id, s.name]))
+      const fieldTripStudentNames = sub.field_trip_student_ids.map((id) => nameMap.get(id) ?? `#${id}`)
+      const fieldTripExtraNames = sub.field_trip_extra_participant_names ?? []
+      const fieldTripNames = [...fieldTripStudentNames, ...fieldTripExtraNames]
       return {
         id: sub.id,
         school_name: school?.name ?? 'Unknown School',
@@ -74,10 +90,13 @@ export const submissionService = {
         extra_participants: sub.extra_participant_names?.length
           ? sub.extra_participant_names.join(', ')
           : undefined,
+        field_trip_extra_participants: fieldTripExtraNames.length
+          ? fieldTripExtraNames.join(', ')
+          : undefined,
         field_trip_students:
-          sub.field_trip_student_ids.length === 0
+          fieldTripNames.length === 0
             ? 'Not participating'
-            : sub.field_trip_student_ids.map((id) => nameMap.get(id) ?? `#${id}`).join(', '),
+            : fieldTripNames.join(', '),
         submitted_at: sub.submitted_at,
       }
     }))

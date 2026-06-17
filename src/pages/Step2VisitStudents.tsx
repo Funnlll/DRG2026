@@ -207,13 +207,16 @@ export default function Step2VisitStudents() {
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                  <div className="font-semibold text-primary mb-2">Add New Participant</div>
+                  <div className="font-semibold text-primary">Add New Participant</div>
+                  <div className="mt-1 mb-2 text-xs leading-relaxed text-mute">
+                    Format: First Name, Surname, Student/Supervisor, Gender, Dietary Preference(s)
+                  </div>
                   <input
                     type="text"
                     value={newParticipant}
                     onChange={(e) => setNewParticipant(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleAddParticipant()}
-                    placeholder="Enter participant name..."
+                    placeholder="e.g. Alex, Chen, Student, Female, Vegetarian"
                     className="w-full h-11 px-4 rounded-xl bg-cream-paper border-2 border-border focus:border-accent focus:outline-none transition-colors text-sm"
                     autoFocus
                   />

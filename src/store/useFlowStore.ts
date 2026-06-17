@@ -7,6 +7,7 @@ interface FlowState {
   visitStudentIds: number[]
   extraParticipantNames: string[]
   fieldTripStudentIds: number[]
+  fieldTripExtraParticipantNames: string[]
   lastSubmission: Submission | null
 
   setSchool: (id: number, name: string) => void
@@ -14,6 +15,7 @@ interface FlowState {
   addExtraParticipant: (name: string) => void
   removeExtraParticipant: (name: string) => void
   setFieldTripStudents: (ids: number[]) => void
+  setFieldTripExtraParticipants: (names: string[]) => void
   setLastSubmission: (s: Submission) => void
   reset: () => void
 }
@@ -24,6 +26,7 @@ export const useFlowStore = create<FlowState>((set) => ({
   visitStudentIds: [],
   extraParticipantNames: [],
   fieldTripStudentIds: [],
+  fieldTripExtraParticipantNames: [],
   lastSubmission: null,
 
   setSchool: (id, name) => set({ schoolId: id, schoolName: name }),
@@ -39,10 +42,16 @@ export const useFlowStore = create<FlowState>((set) => ({
       extraParticipantNames: [...s.extraParticipantNames, name],
     })),
   removeExtraParticipant: (name) =>
-    set((s) => ({
-      extraParticipantNames: s.extraParticipantNames.filter((n) => n !== name),
-    })),
+    set((s) => {
+      const extraParticipantNames = s.extraParticipantNames.filter((n) => n !== name)
+      const extraSet = new Set(extraParticipantNames)
+      return {
+        extraParticipantNames,
+        fieldTripExtraParticipantNames: s.fieldTripExtraParticipantNames.filter((n) => extraSet.has(n)),
+      }
+    }),
   setFieldTripStudents: (ids) => set({ fieldTripStudentIds: ids }),
+  setFieldTripExtraParticipants: (names) => set({ fieldTripExtraParticipantNames: names }),
   setLastSubmission: (sub) => set({ lastSubmission: sub }),
   reset: () =>
     set({
@@ -51,6 +60,7 @@ export const useFlowStore = create<FlowState>((set) => ({
       visitStudentIds: [],
       extraParticipantNames: [],
       fieldTripStudentIds: [],
+      fieldTripExtraParticipantNames: [],
       lastSubmission: null,
     }),
 }))

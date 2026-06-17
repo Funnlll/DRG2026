@@ -9,7 +9,15 @@ import { useToast } from '@/hooks/useToast'
 
 export default function Success() {
   const navigate = useNavigate()
-  const { lastSubmission, schoolName, visitStudentIds, extraParticipantNames, fieldTripStudentIds, reset } = useFlowStore()
+  const {
+    lastSubmission,
+    schoolName,
+    visitStudentIds,
+    extraParticipantNames,
+    fieldTripStudentIds,
+    fieldTripExtraParticipantNames,
+    reset,
+  } = useFlowStore()
   const toast = useToast()
 
   useEffect(() => {
@@ -43,6 +51,8 @@ export default function Success() {
       return iso
     }
   }
+
+  const fieldTripTotal = fieldTripStudentIds.length + fieldTripExtraParticipantNames.length
 
   return (
     <PageLayout step={null}>
@@ -100,8 +110,8 @@ export default function Success() {
             <SummaryItem
               icon={<Bus className="w-4 h-4" />}
               label="Field Trip"
-              value={fieldTripStudentIds.length === 0 ? 'Not participating' : `${fieldTripStudentIds.length} students`}
-              highlight={fieldTripStudentIds.length === 0}
+              value={fieldTripTotal === 0 ? 'Not participating' : `${fieldTripTotal} participants`}
+              highlight={fieldTripTotal === 0}
             />
           </div>
 
@@ -129,7 +139,7 @@ export default function Success() {
                 Join Group Chat
               </div>
               <h3 className="font-display text-xl sm:text-2xl font-bold text-primary leading-tight">
-                Scan to Join Activity Group
+                Scan to Join Activity Wechat Group
               </h3>
               <p className="mt-2 text-sm text-mute leading-relaxed">
                 Please scan the QR code with WeChat to join the activity group chat. Important updates and announcements will be shared there.

@@ -1,13 +1,10 @@
 import { Router, type Request, type Response } from 'express'
 import { submissionService, ValidationError, type SubmitInput } from '../services/submission.service.js'
-import { sendSubmissionEmail } from '../services/email.service.js'
+import { isEmailConfigured, sendSubmissionEmail } from '../services/email.service.js'
 import { buildSubmissionsWorkbook } from '../utils/excel.js'
 
 const router = Router()
 
-/**
- * POST /api/submissions - 提交一条记录
- */
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const input: SubmitInput = {
@@ -19,15 +16,26 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         ? req.body.field_trip_student_ids.map(Number)
         : [],
       extra_participant_names: Array.isArray(req.body?.extra_participant_names)
-        ? req.body.extra_participant_names
+        ? req.body.extra_participant_names.map(String)
+        : [],
+      field_trip_extra_participant_names: Array.isArray(req.body?.field_trip_extra_participant_names)
+        ? req.body.field_trip_extra_participant_names.map(String)
         : [],
     }
+
     const result = await submissionService.create(input)
 
-    // 异步发送邮件通知（不阻塞响应）
-    sendSubmissionEmail(result).catch((err) => {
-      console.error('Failed to send email:', err)
-    })
+    if (isEmailConfigured()) {
+      sendSubmissionEmail(result)
+        .then(() => {
+          console.log(`Submission #${result.id} email sent`)
+        })
+        .catch((err) => {
+          console.error(`Failed to send submission #${result.id} email:`, err)
+        })
+    } else {
+      console.warn(`Submission #${result.id} saved, but email is not configured`)
+    }
 
     res.json({ submission: result })
   } catch (e) {
@@ -40,9 +48,6 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
-/**
- * GET /api/submissions - 获取所有提交记录
- */
 router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     res.json({ submissions: await submissionService.list() })
@@ -52,9 +57,6 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
   }
 })
 
-/**
- * GET /api/submissions/export - 导出 Excel
- */
 router.get('/export', async (_req: Request, res: Response): Promise<void> => {
   try {
     const buffer = await buildSubmissionsWorkbook()
@@ -67,7 +69,7 @@ router.get('/export', async (_req: Request, res: Response): Promise<void> => {
     res.send(buffer)
   } catch (e) {
     console.error(e)
-    res.status(500).json({ error: 'Excel 导出失败' })
+    res.status(500).json({ error: 'Excel export failed' })
   }
 })
 

@@ -15,6 +15,7 @@ export interface Submission {
   visit_student_ids: number[]
   field_trip_student_ids: number[]
   extra_participant_names?: string[]
+  field_trip_extra_participant_names?: string[]
   submitted_at: string
 }
 
@@ -24,6 +25,7 @@ export interface SubmissionListItem {
   visit_students: string
   extra_participants?: string
   field_trip_students: string
+  field_trip_extra_participants?: string
   submitted_at: string
 }
 
